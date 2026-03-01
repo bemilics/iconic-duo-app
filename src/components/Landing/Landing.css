@@ -1,0 +1,50 @@
+.landing {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.landing-content {
+  text-align: center;
+  max-width: 600px;
+}
+
+.landing-title {
+  font-size: 4rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.landing-subtitle {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  margin-bottom: 3rem;
+  line-height: 1.6;
+}
+
+.landing-button {
+  background-color: var(--accent);
+  color: var(--text-primary);
+  padding: 1rem 3rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.landing-button:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .landing-title {
+    font-size: 2.5rem;
+  }
+
+  .landing-subtitle {
+    font-size: 1rem;
+  }
+}
