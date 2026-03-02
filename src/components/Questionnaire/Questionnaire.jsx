@@ -119,19 +119,34 @@ function Questionnaire({ userType }) {
       // Generar perfil B con Claude API
       const profileB = await questionnaireSession.current.generateProfile()
 
+      // Crear sesión para Usuario B (para que tenga su propio dashboard)
+      const sessionB = await createUserSession(profileB)
+
       // Cruzar con perfil A y generar resultado
       const result = await analyzeDuo(userAProfile.current, profileB)
 
-      // Guardar resultado en Supabase
-      const duoResult = await createDuoResult({
-        sessionId: sessionId,
+      // Guardar resultado para Usuario A (en su dashboard)
+      await createDuoResult({
+        sessionId: sessionId, // sesión de A
         bName: userName.trim(),
         bProfile: profileB,
         result: result
       })
 
-      // Navegar al resultado
-      navigate(`/${sessionId}/result/${duoResult.resultId}`)
+      // Guardar resultado para Usuario B (en su dashboard)
+      // Obtener nombre de A desde la sesión
+      const sessionA = await getUserSession(sessionId)
+      const userAName = sessionA.profile.archetype || 'Otro usuario' // usar archetype como nombre temporal
+
+      await createDuoResult({
+        sessionId: sessionB.sessionId, // sesión de B
+        bName: userAName,
+        bProfile: userAProfile.current,
+        result: result
+      })
+
+      // Navegar al dashboard de B
+      navigate(`/${sessionB.sessionId}/dashboard`)
 
     } catch (err) {
       console.error('Error submitting name:', err)

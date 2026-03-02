@@ -35,6 +35,16 @@
   line-height: 1.5;
 }
 
+.realtime-hint {
+  font-size: 0.875rem;
+  color: var(--accent);
+  margin-top: 1rem;
+  text-align: center;
+  padding: 0.75rem;
+  background-color: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+}
+
 .share-link-container {
   display: flex;
   gap: 1rem;

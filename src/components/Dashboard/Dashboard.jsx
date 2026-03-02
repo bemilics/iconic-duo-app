@@ -101,6 +101,9 @@ function Dashboard() {
           <p className="share-hint">
             Cualquier persona que abra este link podrá completar el cuestionario y generar un resultado contigo.
           </p>
+          <p className="realtime-hint">
+            💫 Los nuevos resultados aparecerán automáticamente (o recarga si no ves cambios)
+          </p>
         </div>
 
         {isLoading ? (
