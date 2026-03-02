@@ -41,41 +41,65 @@ src/
 npm install
 ```
 
-2. Copiar `.env.example` a `.env` y configurar las variables:
+2. Configurar Supabase:
+```bash
+# Ver guía completa en supabase/SETUP.md
+# 1. Crear proyecto en supabase.com
+# 2. Ejecutar scripts en supabase/migrations/
+# 3. Copiar credenciales a .env
+```
+
+3. Copiar `.env.example` a `.env` y configurar las variables:
 ```bash
 cp .env.example .env
 ```
 
-3. Configurar variables de entorno:
+4. Configurar variables de entorno:
 - `VITE_SUPABASE_URL`: URL de tu proyecto Supabase
 - `VITE_SUPABASE_ANON_KEY`: Anon key de Supabase
 - `VITE_ANTHROPIC_API_KEY`: API key de Anthropic Claude
 
-4. Ejecutar en desarrollo:
+5. Ejecutar en desarrollo:
 ```bash
 npm run dev
 ```
 
 ## Base de Datos (Supabase)
 
-### Tabla: user_sessions
-- `id` (string, PK): ID único de sesión de A
-- `profile` (jsonb): Perfil interno generado por Claude
-- `created_at` (timestamp)
+**Ver guía completa de configuración en [`supabase/SETUP.md`](supabase/SETUP.md)**
 
-### Tabla: duo_results
-- `id` (string, PK): ID único del resultado
-- `session_id` (string, FK): Referencia a user_sessions
-- `b_name` (string): Nombre de Usuario B
-- `b_profile` (jsonb): Perfil interno de B
-- `result` (jsonb): Resultado completo del dúo
-- `created_at` (timestamp)
+### Tablas
+
+**user_sessions** - Perfiles de Usuario A
+- `id` (UUID, PK): ID único de sesión (también es el sessionId en la URL)
+- `profile` (JSONB): Perfil interno generado por Claude
+- `created_at` (TIMESTAMP)
+
+**duo_results** - Resultados de dúos
+- `id` (UUID, PK): ID único del resultado
+- `session_id` (UUID, FK): Referencia a user_sessions
+- `b_name` (TEXT): Nombre de Usuario B
+- `b_profile` (JSONB): Perfil interno de B
+- `result` (JSONB): Resultado completo del dúo (7 secciones)
+- `created_at` (TIMESTAMP)
+
+### Migraciones Disponibles
+
+1. `001_initial_schema.sql` - Tablas y políticas RLS
+2. `002_functions.sql` - Funciones útiles (get_session_results, count_session_results)
+3. `003_seed_data.sql` - Datos de prueba (opcional, solo desarrollo)
 
 ## Pendientes
 
+- [x] Configurar esquema de Supabase
 - [ ] Implementar llamadas a Claude API
-- [ ] Configurar esquema de Supabase
 - [ ] Implementar servicios de base de datos
 - [ ] Implementar generación de imágenes compartibles
 - [ ] Configurar Supabase Realtime para dashboard
 - [ ] Deploy en Vercel
+
+## Documentación Adicional
+
+- [Configuración de Supabase](supabase/SETUP.md) - Guía completa de setup de base de datos
+- [Especificaciones Técnicas](spec_doc_v2.txt) - Documento de especificaciones
+- [Content Bible](content_bible_v2.txt) - Guía de tono y contenido
