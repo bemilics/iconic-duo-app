@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
+import { getDuoResult } from '../../services'
 import './Result.css'
 
 function Result() {
   const { sessionId, resultId } = useParams()
   const [result, setResult] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadResult()
@@ -13,38 +15,21 @@ function Result() {
 
   const loadResult = async () => {
     setIsLoading(true)
+    setError(null)
+
     try {
-      // TODO: Cargar resultado desde Supabase
-      // Mock data por ahora
-      setResult({
-        duo_name: 'Los que llegan tarde pero llegan bien',
-        cultural_reference: {
-          reference: 'Joel y Ellie de The Last of Us',
-          explanation: 'Uno carga la experiencia, el otro carga el futuro'
-        },
-        dynamic: 'Uno genera velocidad, el otro genera dirección. El problema es que raramente están de acuerdo sobre cuándo ir rápido y hacia dónde. Lo que los sostiene es que los dos lo saben y ninguno lo dice.',
-        individual_analysis: {
-          person_a: {
-            archetype_name: 'El que llega tarde con la respuesta correcta',
-            role_in_duo: 'Aporta claridad cuando ya todo el mundo tomó una decisión'
-          },
-          person_b: {
-            archetype_name: 'La que ya lo sabía pero esperó que lo descubrieras solo',
-            role_in_duo: 'Mantiene el rumbo sin forzar el camino'
-          }
-        },
-        green_flags: [
-          'Como dúo generan una energía tan específica que el resto del grupo sabe que algo bueno está por pasar',
-          'Tienen una forma de resolver problemas que parece caótica desde afuera pero funciona perfectamente para ellos'
-        ],
-        red_flags: [
-          'Juntos tienen tanta claridad sobre ciertas cosas que pueden volverse difíciles de convencer desde afuera',
-          'Como dúo pueden generar una burbuja tan cómoda que el resto del mundo se siente como ruido'
-        ],
-        probable_arc: 'En algún momento van a terminar siendo los que resuelven algo que nadie más quería resolver. Y van a disfrutarlo más de lo que admiten.'
-      })
-    } catch (error) {
-      console.error('Error loading result:', error)
+      const duoResult = await getDuoResult(resultId)
+
+      if (!duoResult) {
+        setError('Este resultado no existe o ha sido eliminado.')
+        return
+      }
+
+      setResult(duoResult.result)
+
+    } catch (err) {
+      console.error('Error loading result:', err)
+      setError('No se pudo cargar el resultado.')
     } finally {
       setIsLoading(false)
     }
@@ -53,6 +38,7 @@ function Result() {
   const handleShare = async () => {
     // TODO: Generar imagen compartible
     console.log('Compartir resultado')
+    alert('La funcionalidad de compartir como imagen está en desarrollo.')
   }
 
   if (isLoading) {
@@ -63,10 +49,18 @@ function Result() {
     )
   }
 
-  if (!result) {
+  if (error || !result) {
     return (
       <div className="result">
-        <div className="error">No se encontró el resultado</div>
+        <div className="error-message">
+          <p>{error || 'No se encontró el resultado'}</p>
+          <button
+            className="retry-button"
+            onClick={() => window.history.back()}
+          >
+            Volver
+          </button>
+        </div>
       </div>
     )
   }

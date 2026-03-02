@@ -1,10 +1,12 @@
-export const CLAUDE_CONFIG = {
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-4-6',
-  maxTokens: 2048,
-  apiUrl: 'https://api.anthropic.com/v1/messages'
-}
+/**
+ * Configuración de Claude API
+ * Las llamadas se hacen a través de /api/claude (serverless function)
+ * La API key se maneja en el backend por seguridad
+ */
 
-if (!CLAUDE_CONFIG.apiKey) {
-  console.warn('Missing Anthropic API key')
+export const CLAUDE_CONFIG = {
+  // Modelo usado en el backend
+  model: 'claude-sonnet-4-20250514',
+  // Tokens por defecto
+  maxTokens: 2048
 }

@@ -1,5 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  createQuestionnaireSession,
+  getUserSession,
+  createUserSession,
+  createDuoResult,
+  analyzeDuo
+} from '../../services'
 import './Questionnaire.css'
 
 function Questionnaire({ userType }) {
@@ -7,37 +14,45 @@ function Questionnaire({ userType }) {
   const navigate = useNavigate()
 
   const [currentQuestion, setCurrentQuestion] = useState(null)
-  const [questionNumber, setQuestionNumber] = useState(1)
-  const [conversationHistory, setConversationHistory] = useState([])
+  const [questionNumber, setQuestionNumber] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [showNameInput, setShowNameInput] = useState(false)
   const [userName, setUserName] = useState('')
+  const [error, setError] = useState(null)
+
+  // Usar ref para mantener la sesión de cuestionario entre renders
+  const questionnaireSession = useRef(null)
+  const userAProfile = useRef(null)
 
   useEffect(() => {
-    // Si es usuario B, verificar que existe la sesión
-    if (userType === 'B' && sessionId) {
-      // TODO: Verificar sesión en Supabase
-      console.log('Verificando sesión:', sessionId)
-    }
-
-    // Cargar primera pregunta
-    loadFirstQuestion()
+    initializeQuestionnaire()
   }, [])
 
-  const loadFirstQuestion = async () => {
+  const initializeQuestionnaire = async () => {
     setIsLoading(true)
+    setError(null)
+
     try {
-      // TODO: Llamar a Claude API para obtener primera pregunta
-      // Por ahora, mock
-      setCurrentQuestion({
-        text: '¿Qué hacés cuando una película que amás tiene un final malo?',
-        options: [
-          'Lo acepto — el final forma parte de la obra',
-          'Lo ignoro mentalmente y me quedo con la versión que prefiero'
-        ]
-      })
-    } catch (error) {
-      console.error('Error loading question:', error)
+      // Si es usuario B, verificar que existe la sesión y cargar perfil de A
+      if (userType === 'B' && sessionId) {
+        const session = await getUserSession(sessionId)
+        if (!session) {
+          setError('Esta sesión no existe o ha expirado.')
+          return
+        }
+        userAProfile.current = session.profile
+      }
+
+      // Crear sesión de cuestionario e iniciar
+      questionnaireSession.current = createQuestionnaireSession()
+      const firstQuestion = await questionnaireSession.current.getFirstQuestion()
+
+      setCurrentQuestion(firstQuestion)
+      setQuestionNumber(firstQuestion.questionNumber)
+
+    } catch (err) {
+      console.error('Error initializing questionnaire:', err)
+      setError('Hubo un error al cargar el cuestionario. Por favor recarga la página.')
     } finally {
       setIsLoading(false)
     }
@@ -45,48 +60,52 @@ function Questionnaire({ userType }) {
 
   const handleAnswer = async (answer) => {
     setIsLoading(true)
+    setError(null)
 
     try {
-      // Agregar respuesta al historial
-      const newHistory = [
-        ...conversationHistory,
-        { question: currentQuestion.text, answer }
-      ]
-      setConversationHistory(newHistory)
+      // Enviar respuesta y obtener siguiente pregunta
+      const nextQuestion = await questionnaireSession.current.submitAnswer(answer)
 
-      if (questionNumber === 9) {
-        // Última pregunta - mostrar input de nombre para usuario B
+      if (!nextQuestion) {
+        // Ya completó las 9 preguntas
         if (userType === 'B') {
+          // Usuario B - mostrar input de nombre
           setShowNameInput(true)
         } else {
           // Usuario A - generar perfil y crear sesión
-          await finishQuestionnaireA(newHistory)
+          await finishQuestionnaireA()
         }
       } else {
-        // Cargar siguiente pregunta
-        setQuestionNumber(questionNumber + 1)
-        // TODO: Llamar a Claude API con el historial para obtener siguiente pregunta
-        // Por ahora, mock
-        setCurrentQuestion({
-          text: 'Pregunta ' + (questionNumber + 1),
-          options: ['Opción A', 'Opción B', 'Opción C']
-        })
+        // Mostrar siguiente pregunta
+        setCurrentQuestion(nextQuestion)
+        setQuestionNumber(nextQuestion.questionNumber)
       }
-    } catch (error) {
-      console.error('Error handling answer:', error)
+
+    } catch (err) {
+      console.error('Error handling answer:', err)
+      setError('Hubo un error procesando tu respuesta. Por favor intenta de nuevo.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const finishQuestionnaireA = async (history) => {
+  const finishQuestionnaireA = async () => {
     try {
-      // TODO: Generar perfil con Claude API
-      // TODO: Guardar en Supabase user_sessions
-      // TODO: Navegar a dashboard con sessionId
-      console.log('Finalizando cuestionario A')
-    } catch (error) {
-      console.error('Error finishing questionnaire A:', error)
+      setIsLoading(true)
+
+      // Generar perfil con Claude API
+      const profile = await questionnaireSession.current.generateProfile()
+
+      // Guardar sesión en Supabase
+      const session = await createUserSession(profile)
+
+      // Navegar al dashboard
+      navigate(`/${session.sessionId}/dashboard`)
+
+    } catch (err) {
+      console.error('Error finishing questionnaire A:', err)
+      setError('Hubo un error guardando tu perfil. Por favor intenta de nuevo.')
+      setIsLoading(false)
     }
   }
 
@@ -94,19 +113,53 @@ function Questionnaire({ userType }) {
     if (!userName.trim()) return
 
     setIsLoading(true)
+    setError(null)
+
     try {
-      // TODO: Generar perfil B con Claude API
-      // TODO: Cruzar con perfil A y generar resultado
-      // TODO: Guardar en Supabase duo_results
-      // TODO: Navegar a resultado
-      console.log('Generando resultado para:', userName)
-    } catch (error) {
-      console.error('Error submitting name:', error)
-    } finally {
+      // Generar perfil B con Claude API
+      const profileB = await questionnaireSession.current.generateProfile()
+
+      // Cruzar con perfil A y generar resultado
+      const result = await analyzeDuo(userAProfile.current, profileB)
+
+      // Guardar resultado en Supabase
+      const duoResult = await createDuoResult({
+        sessionId: sessionId,
+        bName: userName.trim(),
+        bProfile: profileB,
+        result: result
+      })
+
+      // Navegar al resultado
+      navigate(`/${sessionId}/result/${duoResult.resultId}`)
+
+    } catch (err) {
+      console.error('Error submitting name:', err)
+      setError('Hubo un error generando el resultado. Por favor intenta de nuevo.')
       setIsLoading(false)
     }
   }
 
+  // Pantalla de error
+  if (error && !showNameInput && questionNumber === 0) {
+    return (
+      <div className="questionnaire">
+        <div className="questionnaire-content">
+          <div className="error-message">
+            <p>{error}</p>
+            <button
+              className="retry-button"
+              onClick={() => window.location.reload()}
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Pantalla de input de nombre (Usuario B)
   if (showNameInput) {
     return (
       <div className="questionnaire">
@@ -120,7 +173,9 @@ function Questionnaire({ userType }) {
             onChange={(e) => setUserName(e.target.value)}
             placeholder="Tu nombre"
             disabled={isLoading}
+            autoFocus
           />
+          {error && <p className="error-text">{error}</p>}
           <button
             className="submit-button"
             onClick={handleSubmitName}
@@ -133,6 +188,7 @@ function Questionnaire({ userType }) {
     )
   }
 
+  // Pantalla de cuestionario
   return (
     <div className="questionnaire">
       <div className="questionnaire-content">
@@ -145,12 +201,14 @@ function Questionnaire({ userType }) {
         ) : currentQuestion ? (
           <>
             <h2 className="question-text">{currentQuestion.text}</h2>
+            {error && <p className="error-text">{error}</p>}
             <div className="options-container">
               {currentQuestion.options.map((option, index) => (
                 <button
                   key={index}
                   className="option-button"
                   onClick={() => handleAnswer(option)}
+                  disabled={isLoading}
                 >
                   {option}
                 </button>

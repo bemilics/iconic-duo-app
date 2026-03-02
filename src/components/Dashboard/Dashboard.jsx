@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { getSessionResults, subscribeToSessionResults, unsubscribe } from '../../services'
 import './Dashboard.css'
 
 function Dashboard() {
@@ -9,30 +10,32 @@ function Dashboard() {
   const [duoResults, setDuoResults] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [shareLink, setShareLink] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadDuoResults()
     generateShareLink()
 
-    // TODO: Configurar Supabase Realtime para actualizar automáticamente
+    // Configurar Supabase Realtime para actualizar automáticamente
+    const subscription = subscribeToSessionResults(sessionId, handleNewResult)
+
+    // Cleanup al desmontar
+    return () => {
+      unsubscribe(subscription)
+    }
   }, [sessionId])
 
   const loadDuoResults = async () => {
     setIsLoading(true)
+    setError(null)
+
     try {
-      // TODO: Consultar duo_results desde Supabase por sessionId
-      // Mock data por ahora
-      setDuoResults([
-        {
-          id: '1',
-          b_name: 'María',
-          result: {
-            duo_name: 'Los que llegan tarde pero llegan bien'
-          }
-        }
-      ])
-    } catch (error) {
-      console.error('Error loading duo results:', error)
+      const results = await getSessionResults(sessionId)
+      setDuoResults(results)
+    } catch (err) {
+      console.error('Error loading duo results:', err)
+      setError('No se pudieron cargar los resultados.')
     } finally {
       setIsLoading(false)
     }
@@ -43,13 +46,38 @@ function Dashboard() {
     setShareLink(link)
   }
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareLink)
-    // TODO: Mostrar feedback visual
+  const handleNewResult = (newResult) => {
+    // Agregar nuevo resultado al principio de la lista
+    setDuoResults(prev => [newResult, ...prev])
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Error copying link:', err)
+    }
   }
 
   const handleResultClick = (resultId) => {
     navigate(`/${sessionId}/result/${resultId}`)
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-content">
+          <div className="error-message">
+            <p>{error}</p>
+            <button className="retry-button" onClick={loadDuoResults}>
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -67,9 +95,12 @@ function Dashboard() {
               readOnly
             />
             <button className="copy-button" onClick={handleCopyLink}>
-              Copiar
+              {copied ? 'Copiado!' : 'Copiar'}
             </button>
           </div>
+          <p className="share-hint">
+            Cualquier persona que abra este link podrá completar el cuestionario y generar un resultado contigo.
+          </p>
         </div>
 
         {isLoading ? (
@@ -85,12 +116,15 @@ function Dashboard() {
           <div className="results-list">
             {duoResults.map((result) => (
               <div
-                key={result.id}
+                key={result.resultId}
                 className="result-item"
-                onClick={() => handleResultClick(result.id)}
+                onClick={() => handleResultClick(result.resultId)}
               >
-                <div className="result-name">{result.b_name}</div>
-                <div className="result-duo-name">{result.result.duo_name}</div>
+                <div className="result-name">{result.bName}</div>
+                <div className="result-duo-name">{result.duoName}</div>
+                {result.culturalReference && (
+                  <div className="result-reference">{result.culturalReference}</div>
+                )}
               </div>
             ))}
           </div>
