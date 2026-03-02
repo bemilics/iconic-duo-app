@@ -8,6 +8,20 @@
   margin: 0 auto;
 }
 
+.back-button {
+  background-color: transparent;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 2rem;
+  transition: color 0.2s ease;
+}
+
+.back-button:hover {
+  color: var(--text-primary);
+}
+
 .result-section {
   margin-bottom: 3rem;
 }

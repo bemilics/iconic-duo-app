@@ -67,14 +67,8 @@ function Questionnaire({ userType }) {
       const nextQuestion = await questionnaireSession.current.submitAnswer(answer)
 
       if (!nextQuestion) {
-        // Ya completó las 9 preguntas
-        if (userType === 'B') {
-          // Usuario B - mostrar input de nombre
-          setShowNameInput(true)
-        } else {
-          // Usuario A - generar perfil y crear sesión
-          await finishQuestionnaireA()
-        }
+        // Ya completó las 9 preguntas - mostrar input de nombre para A y B
+        setShowNameInput(true)
       } else {
         // Mostrar siguiente pregunta
         setCurrentQuestion(nextQuestion)
@@ -89,26 +83,6 @@ function Questionnaire({ userType }) {
     }
   }
 
-  const finishQuestionnaireA = async () => {
-    try {
-      setIsLoading(true)
-
-      // Generar perfil con Claude API
-      const profile = await questionnaireSession.current.generateProfile()
-
-      // Guardar sesión en Supabase
-      const session = await createUserSession(profile)
-
-      // Navegar al dashboard
-      navigate(`/${session.sessionId}/dashboard`)
-
-    } catch (err) {
-      console.error('Error finishing questionnaire A:', err)
-      setError('Hubo un error guardando tu perfil. Por favor intenta de nuevo.')
-      setIsLoading(false)
-    }
-  }
-
   const handleSubmitName = async () => {
     if (!userName.trim()) return
 
@@ -116,37 +90,55 @@ function Questionnaire({ userType }) {
     setError(null)
 
     try {
-      // Generar perfil B con Claude API
-      const profileB = await questionnaireSession.current.generateProfile()
+      if (userType === 'A') {
+        // Usuario A - crear su sesión con nombre
+        const profile = await questionnaireSession.current.generateProfile()
 
-      // Crear sesión para Usuario B (para que tenga su propio dashboard)
-      const sessionB = await createUserSession(profileB)
+        // Agregar nombre al perfil
+        profile.name = userName.trim()
 
-      // Cruzar con perfil A y generar resultado
-      const result = await analyzeDuo(userAProfile.current, profileB)
+        // Guardar sesión en Supabase
+        const session = await createUserSession(profile)
 
-      // Guardar resultado para Usuario A (en su dashboard)
-      await createDuoResult({
-        sessionId: sessionId, // sesión de A
-        bName: userName.trim(),
-        bProfile: profileB,
-        result: result
-      })
+        // Navegar al dashboard
+        navigate(`/${session.sessionId}/dashboard`)
 
-      // Guardar resultado para Usuario B (en su dashboard)
-      // Obtener nombre de A desde la sesión
-      const sessionA = await getUserSession(sessionId)
-      const userAName = sessionA.profile.archetype || 'Otro usuario' // usar archetype como nombre temporal
+      } else {
+        // Usuario B - crear sesión y resultado
+        const profileB = await questionnaireSession.current.generateProfile()
 
-      await createDuoResult({
-        sessionId: sessionB.sessionId, // sesión de B
-        bName: userAName,
-        bProfile: userAProfile.current,
-        result: result
-      })
+        // Agregar nombre al perfil
+        profileB.name = userName.trim()
 
-      // Navegar al dashboard de B
-      navigate(`/${sessionB.sessionId}/dashboard`)
+        // Crear sesión para Usuario B (para que tenga su propio dashboard)
+        const sessionB = await createUserSession(profileB)
+
+        // Cruzar con perfil A y generar resultado
+        const result = await analyzeDuo(userAProfile.current, profileB)
+
+        // Guardar resultado para Usuario A (en su dashboard)
+        await createDuoResult({
+          sessionId: sessionId, // sesión de A
+          bName: userName.trim(),
+          bProfile: profileB,
+          result: result
+        })
+
+        // Guardar resultado para Usuario B (en su dashboard)
+        // Obtener nombre de A desde la sesión
+        const sessionA = await getUserSession(sessionId)
+        const userAName = sessionA.profile.name || 'Otro usuario'
+
+        await createDuoResult({
+          sessionId: sessionB.sessionId, // sesión de B
+          bName: userAName,
+          bProfile: userAProfile.current,
+          result: result
+        })
+
+        // Navegar al dashboard de B
+        navigate(`/${sessionB.sessionId}/dashboard`)
+      }
 
     } catch (err) {
       console.error('Error submitting name:', err)
@@ -196,7 +188,10 @@ function Questionnaire({ userType }) {
             onClick={handleSubmitName}
             disabled={isLoading || !userName.trim()}
           >
-            {isLoading ? 'Generando resultado...' : 'Ver resultado'}
+            {isLoading
+              ? (userType === 'A' ? 'Creando tu perfil...' : 'Generando resultado...')
+              : (userType === 'A' ? 'Ir al dashboard' : 'Ver resultado')
+            }
           </button>
         </div>
       </div>

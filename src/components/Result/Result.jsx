@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { getDuoResult } from '../../services'
 import './Result.css'
 
 function Result() {
   const { sessionId, resultId } = useParams()
+  const navigate = useNavigate()
   const [result, setResult] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,6 +42,10 @@ function Result() {
     alert('La funcionalidad de compartir como imagen está en desarrollo.')
   }
 
+  const handleBackToDashboard = () => {
+    navigate(`/${sessionId}/dashboard`)
+  }
+
   if (isLoading) {
     return (
       <div className="result">
@@ -68,6 +73,10 @@ function Result() {
   return (
     <div className="result">
       <div className="result-content">
+        <button className="back-button" onClick={handleBackToDashboard}>
+          ← Volver al dashboard
+        </button>
+
         <div className="result-section">
           <h1 className="duo-name">{result.duo_name}</h1>
         </div>
