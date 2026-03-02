@@ -6,7 +6,8 @@
 export {
   callClaude,
   parseJsonFromResponse,
-  parseQuestionFromResponse
+  parseQuestionFromResponse,
+  validateQuestion
 } from './claudeApi'
 
 // Questionnaire

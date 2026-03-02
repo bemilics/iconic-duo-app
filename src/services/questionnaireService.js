@@ -1,5 +1,7 @@
-import { callClaude, parseJsonFromResponse, parseQuestionFromResponse } from './claudeApi'
+import { callClaude, parseJsonFromResponse, parseQuestionFromResponse, validateQuestion } from './claudeApi'
 import { QUESTIONNAIRE_SYSTEM_PROMPT } from '../config/prompts'
+
+const MAX_RETRY_ATTEMPTS = 2
 
 /**
  * Servicio para gestionar el cuestionario dinámico de 9 preguntas
@@ -19,38 +21,69 @@ export class QuestionnaireSession {
    * @returns {Promise<Object>} - { text: string, options: string[], questionNumber: number }
    */
   async getFirstQuestion() {
-    try {
-      // Agregar mensaje inicial del usuario pidiendo la primera pregunta
-      this.messages.push({
-        role: 'user',
-        content: 'Empecemos. ¿Cuál es la primera pregunta?'
-      })
+    let attempts = 0
 
-      const response = await callClaude({
-        systemPrompt: QUESTIONNAIRE_SYSTEM_PROMPT,
-        messages: this.messages
-      })
+    while (attempts < MAX_RETRY_ATTEMPTS) {
+      try {
+        // Solo agregar el mensaje inicial en el primer intento
+        if (attempts === 0) {
+          this.messages.push({
+            role: 'user',
+            content: 'Empecemos. ¿Cuál es la primera pregunta?'
+          })
+        } else {
+          // En reintentos, pedir que reformatee la pregunta
+          this.messages.push({
+            role: 'user',
+            content: 'Por favor reformatea la pregunta con exactamente 2 o 3 opciones claramente separadas.'
+          })
+        }
 
-      // Agregar respuesta de Claude al historial
-      this.messages.push({
-        role: 'assistant',
-        content: response
-      })
+        const response = await callClaude({
+          systemPrompt: QUESTIONNAIRE_SYSTEM_PROMPT,
+          messages: this.messages
+        })
 
-      this.currentQuestionNumber = 1
+        // Agregar respuesta de Claude al historial
+        this.messages.push({
+          role: 'assistant',
+          content: response
+        })
 
-      // Parsear pregunta y opciones
-      const question = parseQuestionFromResponse(response)
+        // Parsear pregunta y opciones
+        const question = parseQuestionFromResponse(response)
 
-      return {
-        ...question,
-        questionNumber: this.currentQuestionNumber
+        // Validar que la pregunta sea válida
+        if (validateQuestion(question)) {
+          this.currentQuestionNumber = 1
+
+          return {
+            ...question,
+            questionNumber: this.currentQuestionNumber
+          }
+        }
+
+        console.warn(`Question parsing attempt ${attempts + 1} failed validation:`, question)
+        attempts++
+
+        // Si no es válida, quitar los últimos 2 mensajes para reintentar
+        if (attempts < MAX_RETRY_ATTEMPTS) {
+          this.messages.pop() // Quitar respuesta de Claude
+          this.messages.pop() // Quitar pregunta del usuario
+        }
+
+      } catch (error) {
+        console.error('Error getting first question:', error)
+        attempts++
+
+        if (attempts >= MAX_RETRY_ATTEMPTS) {
+          throw error
+        }
       }
-
-    } catch (error) {
-      console.error('Error getting first question:', error)
-      throw error
     }
+
+    // Si llegamos aquí, todos los intentos fallaron
+    throw new Error('No se pudo obtener una pregunta válida después de varios intentos')
   }
 
   /**
@@ -59,44 +92,77 @@ export class QuestionnaireSession {
    * @returns {Promise<Object|null>} - Siguiente pregunta o null si es la última
    */
   async submitAnswer(answer) {
-    try {
-      // Agregar respuesta del usuario al historial
-      this.messages.push({
-        role: 'user',
-        content: answer
-      })
+    let attempts = 0
+    let answerSubmitted = false
 
-      // Si ya completó 9 preguntas, generar perfil
-      if (this.currentQuestionNumber >= 9) {
-        return null // Señal de que terminó
+    while (attempts < MAX_RETRY_ATTEMPTS) {
+      try {
+        // Solo agregar la respuesta del usuario en el primer intento
+        if (!answerSubmitted) {
+          this.messages.push({
+            role: 'user',
+            content: answer
+          })
+          answerSubmitted = true
+        } else {
+          // En reintentos, pedir reformatear
+          this.messages.push({
+            role: 'user',
+            content: 'Por favor reformatea la pregunta con exactamente 2 o 3 opciones claramente separadas.'
+          })
+        }
+
+        // Si ya completó 9 preguntas, generar perfil
+        if (this.currentQuestionNumber >= 9) {
+          return null // Señal de que terminó
+        }
+
+        // Obtener siguiente pregunta
+        const response = await callClaude({
+          systemPrompt: QUESTIONNAIRE_SYSTEM_PROMPT,
+          messages: this.messages
+        })
+
+        // Agregar respuesta de Claude al historial
+        this.messages.push({
+          role: 'assistant',
+          content: response
+        })
+
+        // Parsear pregunta y opciones
+        const question = parseQuestionFromResponse(response)
+
+        // Validar que la pregunta sea válida
+        if (validateQuestion(question)) {
+          this.currentQuestionNumber++
+
+          return {
+            ...question,
+            questionNumber: this.currentQuestionNumber
+          }
+        }
+
+        console.warn(`Question parsing attempt ${attempts + 1} failed validation:`, question)
+        attempts++
+
+        // Si no es válida, quitar los últimos 2 mensajes para reintentar
+        if (attempts < MAX_RETRY_ATTEMPTS) {
+          this.messages.pop() // Quitar respuesta de Claude
+          this.messages.pop() // Quitar mensaje del usuario
+        }
+
+      } catch (error) {
+        console.error('Error submitting answer:', error)
+        attempts++
+
+        if (attempts >= MAX_RETRY_ATTEMPTS) {
+          throw error
+        }
       }
-
-      // Obtener siguiente pregunta
-      const response = await callClaude({
-        systemPrompt: QUESTIONNAIRE_SYSTEM_PROMPT,
-        messages: this.messages
-      })
-
-      // Agregar respuesta de Claude al historial
-      this.messages.push({
-        role: 'assistant',
-        content: response
-      })
-
-      this.currentQuestionNumber++
-
-      // Parsear pregunta y opciones
-      const question = parseQuestionFromResponse(response)
-
-      return {
-        ...question,
-        questionNumber: this.currentQuestionNumber
-      }
-
-    } catch (error) {
-      console.error('Error submitting answer:', error)
-      throw error
     }
+
+    // Si llegamos aquí, todos los intentos fallaron
+    throw new Error('No se pudo obtener una pregunta válida después de varios intentos')
   }
 
   /**

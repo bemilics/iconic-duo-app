@@ -28,6 +28,66 @@ function Questionnaire({ userType }) {
     initializeQuestionnaire()
   }, [])
 
+  // Guardar progreso después de cada respuesta
+  useEffect(() => {
+    if (questionnaireSession.current && questionNumber > 0) {
+      saveProgress()
+    }
+  }, [questionNumber])
+
+  const getStorageKey = () => {
+    return userType === 'B' && sessionId
+      ? `questionnaire-progress-B-${sessionId}`
+      : 'questionnaire-progress-A'
+  }
+
+  const saveProgress = () => {
+    try {
+      if (!questionnaireSession.current) return
+
+      const state = questionnaireSession.current.getState()
+      const progress = {
+        state,
+        currentQuestion,
+        questionNumber,
+        timestamp: Date.now()
+      }
+
+      localStorage.setItem(getStorageKey(), JSON.stringify(progress))
+    } catch (err) {
+      console.error('Error saving progress:', err)
+    }
+  }
+
+  const loadProgress = () => {
+    try {
+      const saved = localStorage.getItem(getStorageKey())
+      if (!saved) return null
+
+      const progress = JSON.parse(saved)
+
+      // Verificar que el progreso no sea muy antiguo (más de 24 horas)
+      const hoursSinceLastSave = (Date.now() - progress.timestamp) / (1000 * 60 * 60)
+      if (hoursSinceLastSave > 24) {
+        localStorage.removeItem(getStorageKey())
+        return null
+      }
+
+      return progress
+    } catch (err) {
+      console.error('Error loading progress:', err)
+      return null
+    }
+  }
+
+  const clearProgress = () => {
+    try {
+      localStorage.removeItem(getStorageKey())
+    } catch (err) {
+      console.error('Error clearing progress:', err)
+    }
+  }
+
   const initializeQuestionnaire = async () => {
     setIsLoading(true)
     setError(null)
@@ -43,12 +103,26 @@ function Questionnaire({ userType }) {
         userAProfile.current = session.profile
       }
 
-      // Crear sesión de cuestionario e iniciar
-      questionnaireSession.current = createQuestionnaireSession()
-      const firstQuestion = await questionnaireSession.current.getFirstQuestion()
+      // Intentar cargar progreso guardado
+      const savedProgress = loadProgress()
 
-      setCurrentQuestion(firstQuestion)
-      setQuestionNumber(firstQuestion.questionNumber)
+      if (savedProgress && savedProgress.state && savedProgress.questionNumber > 0) {
+        // Restaurar sesión desde el progreso guardado
+        questionnaireSession.current = createQuestionnaireSession()
+        questionnaireSession.current.restore(savedProgress.state)
+
+        setCurrentQuestion(savedProgress.currentQuestion)
+        setQuestionNumber(savedProgress.questionNumber)
+
+        console.log(`Progreso restaurado desde pregunta ${savedProgress.questionNumber}`)
+      } else {
+        // Crear nueva sesión de cuestionario e iniciar
+        questionnaireSession.current = createQuestionnaireSession()
+        const firstQuestion = await questionnaireSession.current.getFirstQuestion()
+
+        setCurrentQuestion(firstQuestion)
+        setQuestionNumber(firstQuestion.questionNumber)
+      }
 
     } catch (err) {
       console.error('Error initializing questionnaire:', err)
@@ -100,6 +174,12 @@ function Questionnaire({ userType }) {
         // Guardar sesión en Supabase
         const session = await createUserSession(profile)
 
+        // Guardar session ID en localStorage para auto-redirect
+        localStorage.setItem('iconic-duo-session-id', session.sessionId)
+
+        // Limpiar progreso del cuestionario
+        clearProgress()
+
         // Navegar al dashboard
         navigate(`/${session.sessionId}/dashboard`)
 
@@ -112,6 +192,9 @@ function Questionnaire({ userType }) {
 
         // Crear sesión para Usuario B (para que tenga su propio dashboard)
         const sessionB = await createUserSession(profileB)
+
+        // Guardar session ID en localStorage para auto-redirect
+        localStorage.setItem('iconic-duo-session-id', sessionB.sessionId)
 
         // Cruzar con perfil A y generar resultado
         const result = await analyzeDuo(userAProfile.current, profileB)
@@ -135,6 +218,9 @@ function Questionnaire({ userType }) {
           bProfile: userAProfile.current,
           result: result
         })
+
+        // Limpiar progreso del cuestionario
+        clearProgress()
 
         // Navegar al dashboard de B
         navigate(`/${sessionB.sessionId}/dashboard`)
